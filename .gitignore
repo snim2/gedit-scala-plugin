@@ -1,0 +1,6 @@
+*~
+*.pyc
+pytoradex.egg-info/
+build/
+dist/
+pip-log.txt
