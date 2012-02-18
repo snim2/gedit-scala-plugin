@@ -153,9 +153,10 @@ class FastScalaCompiler(Gtk.HBox):
         process.wait ()
         return
 
-    def _run(self, cmd='fsc'):
+    def _run(self, cmd='fsc', ext=True):
         """Run some command on the current document and return output.
         Do nothing if the current document is not a Scala program.
+        If ext is False, strip the trailing .scala from the filename.
         """
         doc = self._window.get_active_document()
         # Only run fsc if the current document is Scala code.
@@ -166,6 +167,8 @@ class FastScalaCompiler(Gtk.HBox):
         # Get the path and filename of the current document.
         location = doc.get_location()
         basename = location.get_basename()
+        if not ext:
+            basename = basename.split('.')[0]
         path = os.sep.join(location.get_path().split(os.sep)[:-1])        
         # Run compiler or runtime tool and capture output.
         self._status(cmd + ' ' + path + os.sep + basename)
@@ -175,9 +178,6 @@ class FastScalaCompiler(Gtk.HBox):
                                    cwd=path)
         process.wait ()
         output = process.communicate()
-        print 'DEBUG:', cmd, basename
-        print 'RETCODE:', process.returncode
-        print 'OUTPUT:', output
         return output, process.returncode
 
     def _display_tool_output(self, returncode, output, tool='Compiler'):
@@ -197,7 +197,7 @@ class FastScalaCompiler(Gtk.HBox):
         Assume the current document has already been compiled.
         Assume the object name is the same as the un-suffixed document name.
         """
-        output, returncode = self._run(cmd='scala')
+        output, returncode = self._run(cmd='scala', ext=False)
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
@@ -254,7 +254,9 @@ class FastScalaCompiler(Gtk.HBox):
         buff = view.get_buffer()
         buff.create_tag('bold', foreground='#7F7F7F',
                         weight=Pango.Weight.BOLD)
-        buff.create_tag('warning', foreground='#7F7F7F',
+        buff.create_tag('info', foreground='#7F7F7F',
+                        style=Pango.Style.OBLIQUE)
+        buff.create_tag('warning', foreground='orange',
                         style=Pango.Style.OBLIQUE)
         buff.create_tag('error', foreground='red')
         return view
