@@ -345,54 +345,39 @@ class FastScalaCompiler(Gtk.HBox):
     def _create_view(self):
         """Create the gtk.TextView used for compiler / runtime output.
         """
-        doc = self._window.get_active_document()
         model = Gtk.ListStore(str)
         view = Gtk.TreeView(model=model)
         err_col = Gtk.TreeViewColumn('fsc and scala output',
-                                     Gtk.CellRendererText(),
+                                     cell_renderer=Gtk.CellRendererText(),
                                      text=0)
+        view.set_headers_visible(False)
         view.append_column(err_col)
         select = view.get_selection()
         select.connect('changed', self.on_error_clicked)
-        # buff = view.get_buffer()
-        # buff.create_tag('bold', foreground='#7F7F7F',
-        #                 weight=Pango.Weight.BOLD)
-        # buff.create_tag('info', foreground='#7F7F7F',
-        #                 style=Pango.Style.OBLIQUE)
-        # buff.create_tag('warning', foreground='orange',
-        #                 style=Pango.Style.OBLIQUE)
-        # buff.create_tag('error', foreground='red')
         return view
-
     
     def _display_tool_output(self, returncode, output, tool='Compiler'):
         """Display the output of a compiler or runtime to the output pane.
         """
-#        tag = None if returncode == 0 else 'error'
         if returncode == 0:
-            self._insert(['%s finished successfully.\n' % tool])
+            self._insert(['%s finished successfully.\n' % tool], style=None)
             if output is None:
                 return
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
         if messages == []:
-            self._insert([text, 'Exit: %s\n\n' % returncode])
+            self._insert([text, 'Exit: %s\n\n' % returncode], style='grey')
         else:
-            self._insert(messages)
-#        self._append("Exit: ", 'info') 
-#        self._append("%s\n\n" % returncode, 'bold')
+            self._insert(messages, style='red')
         return
     
     def _clear(self):
         """Clear the output panel.
         """
         self._view.set_model(Gtk.ListStore(str))        
-#        buff = self._view.get_buffer()
-#        start, end = buff.get_bounds()
-#        buff.delete(start, end)
         return
 
-    def _insert(self, messages, tag_name=None, append=False):
+    def _insert(self, messages, style=None, append=False):
         """ Insert text, apply tag, and scroll to end iter """
         # pylint: disable-msg=W0141
         if not append:
@@ -400,23 +385,21 @@ class FastScalaCompiler(Gtk.HBox):
         model = self._view.get_model()
         for msg in messages:
             model.append([str(msg)])
-        # buff = self._view.get_buffer()
-        # end_iter = buff.get_end_iter()
-        # buff.insert(end_iter, "%s" % text)
-        # if tag_name:
-        #     offset = buff.get_char_count() - len(text)
-        #     start_iter = buff.get_iter_at_offset(offset)
-        #     end_iter = buff.get_end_iter()
-        #     buff.apply_tag_by_name(tag_name, start_iter, end_iter)
-        # while Gtk.events_pending():
-        #     Gtk.main_iteration()
-        # self._view.scroll_to_iter(buff.get_end_iter(), 0.0, True, 0.0, 0.0)
+        cells = self._view.get_column(0).get_cells()
+        if style is not None:
+            for cell in cells:
+                cell.set_property('foreground', style)
+                cell.set_property('weight', 750)
+        else:
+            for cell in cells:
+                cell.set_property('foreground', 'black')
+                cell.set_property('weight', 400)            
         return
 
-    def _append(self, text, tag_name=None):
+    def _append(self, text):
         """Append text to the output pane.
         """
-        self._insert(text, tag_name, True)
+        self._insert(text, True)
         return
 
     def _create_tags(self):
