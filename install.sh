@@ -8,8 +8,8 @@
 #
 
 # Create a directory for the language spec.
-mkdir ~/.gnome2/gtksourceview-1.0/
-mkdir ~/.gnome2/gtksourceview-1.0/language-specs/
+mkdir -p ~/.gnome2/gtksourceview-1.0/
+mkdir -p ~/.gnome2/gtksourceview-1.0/language-specs/
 
 cd ~/.gnome2/gtksourceview-1.0/language-specs/
 
@@ -17,8 +17,8 @@ cd ~/.gnome2/gtksourceview-1.0/language-specs/
 wget http://lampsvn.epfl.ch/trac/scala/export/26099/scala-tool-support/trunk/src/gedit/scala.lang
 
 # Add a MIME type for Scala files.
-mkdir ~/.local/share/mime/
-mkdir ~/.local/share/mime/packages
+mkdir -p ~/.local/share/mime/
+mkdir -p ~/.local/share/mime/packages
 
 cat > Scala.xml << EOF 
 <mime-info xmlns='http://www.freedesktop.org/standards/shared-mime-info'>
@@ -36,3 +36,19 @@ update-mime-database mime
 
 # Done.
 echo "Scala language specification for GEdit has been installed."
+
+# Install the Scala plugin for on-the-fly compilation.
+echo "Installing a gedit3 plugin for Scala."
+
+# Create gedit directory structure, if it does not exist.
+cd ~/.local/share
+mkdir -p {gedit, gedit/plugins}
+cd gedit/plugins
+
+wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.plugin
+wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.gedit-plugin
+wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.py
+
+echo "Plugin installed."
+echo "*** IMPORTANT ***"
+echo "Please start gedit and activate the Scala On The Fly plugin from the Edit->Preferences dialog"
