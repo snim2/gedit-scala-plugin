@@ -98,10 +98,17 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
     def on_tab_added(self, window, tab, data=None):
         # pylint: disable-msg=W0613
         doc = tab.get_document()
-        handler_id = doc.connect('saved', self.on_document_saved)
-        self._add_handler(handler_id)
+        handler_id1 = doc.connect('saved', self.on_document_saved)
+        self._add_handler(handler_id1)
+        handler_id2 = doc.connect('loaded', self.on_document_loaded)
+        self._add_handler(handler_id2)        
         return
 
+    def on_document_loaded(self, document, data=None):
+        # pylint: disable-msg=W0613
+        self._fsc.compile_background()
+        return
+    
     def on_document_saved(self, document, data=None):
         # pylint: disable-msg=W0613
         self._fsc.compile_background()
@@ -205,7 +212,6 @@ class FastScalaCompiler(Gtk.HBox):
         self._bottom_widget = None
         self._plugin = plugin
         self._window = window
-        self._tags = {}
         scrolled = Gtk.ScrolledWindow()
         self._view = self._create_view()
         scrolled.add(self._view)
@@ -287,9 +293,10 @@ class FastScalaCompiler(Gtk.HBox):
         """Compile the current document.
         """
         output, returncode = self._run(folder=folder)
-        if returncode is None: # No Scala document.
+        if returncode is None:         # No Scala document.
             return None, None
-        if returncode == 0:    # No errors to process.
+        if returncode == 0:            # No errors to process.
+            self._remove_tags()        # Remove old tags.
             return None, returncode
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
@@ -305,20 +312,23 @@ class FastScalaCompiler(Gtk.HBox):
         self._display_tool_output(returncode, output, tool='Compiler')
         return
 
+    def _remove_tags(self, doc=None):
+        if doc is None:
+            doc = self._window.get_active_document()
+        start, end = doc.get_bounds()
+        doc.remove_tag_by_name('flyscala-error', start, end)
+        doc.remove_tag_by_name('flyscala-warning', start, end)
+        return
+
     def _highlight_errors(self, messages):
         """Add tags to all lines of code with warnings or errors.
         """
-        # Remove old tags
         self._create_tags()
         flag = Gtk.TextSearchFlags.TEXT_ONLY
         docs = {}
         for doc in self._window.get_documents():
             docs[doc.get_uri_for_display()] = doc
-            start, end = doc.get_bounds()
-            doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['E'],
-                                   start, end)
-            doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['W'],
-                                   start, end)
+            self._remove_tags(doc)
         for message in messages:
             # Which document is the error in?
             try:
@@ -327,7 +337,8 @@ class FastScalaCompiler(Gtk.HBox):
                 start = doc.get_iter_at_line(message.lineno - 1)
                 end = doc.get_iter_at_line(message.lineno)
                 match = start.forward_search(message.code, flag, end)
-                doc.apply_tag_by_name(message.errtype, match[0], match[1])
+                doc.apply_tag_by_name('flyscala-' + message.errtype,
+                                      match[0], match[1])
             except KeyError: # Document is not open.
                 pass
         return
@@ -402,14 +413,20 @@ class FastScalaCompiler(Gtk.HBox):
         self._insert(text, True)
         return
 
-    def _create_tags(self):
+    def _create_tags(self, doc=None):
         """Create error and warning tags that will annotate source code.
         """
-        doc = self._window.get_active_document()
-        doc.create_tag('error',
-                       underline = Pango.Underline.ERROR)
-        doc.create_tag('warning',
-                       underline = Pango.Underline.SINGLE)
+        if doc is None:
+            doc = self._window.get_active_document()
+
+        err = doc.get_tag_table().lookup('flyscala-error')
+        if err is None:
+            doc.create_tag(tag_name = 'flyscala-error',
+                           underline = Pango.Underline.ERROR)
+        warn = doc.get_tag_table().lookup('flyscala-warning')
+        if warn is None:
+            doc.create_tag(tag_name = 'flyscala-warning',
+                           underline = Pango.Underline.SINGLE)
         return
     
     def add_ui(self):
