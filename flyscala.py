@@ -74,15 +74,39 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         manager.insert_action_group(self._actions)
         self._ui_merge_id = manager.add_ui_from_string(UI_XML)
         manager.ensure_update()
+        self.window.set_data('FlyScalaHandlers', [])
         self._fsc = FastScalaCompiler(self, self.window)
         self._fsc.add_ui()
         return
+
+    def _add_handler(self, handler_id):
+        handlers = self.window.get_data('FlyScalaHandlers')
+        handlers.append(handler_id)
+        self.window.set_data('FlyScalaHandlers', handlers)
+        return
     
+    def on_tab_added(self, window, tab, data=None):
+        # pylint: disable-msg=W0613
+        doc = tab.get_document()
+        handler_id = doc.connect('saved', self.on_document_saved)
+        self._add_handler(handler_id)
+        return
+
+    def on_document_saved(self, document, data=None):
+        # pylint: disable-msg=W0613
+        self._fsc.compile_background()
+        return
+                            
     def do_activate(self):
         self._add_ui()
+        handler_id = self.window.connect('tab-added', self.on_tab_added)
+        self._add_handler(handler_id)
         return
 
     def do_deactivate(self):
+        handlers = self.window.get_data('FlyScalaHandlers')
+        for handler_id in handlers:
+            self.window.disconnect(handler_id)
         self._remove_ui()
         return
 
@@ -370,12 +394,9 @@ class FastScalaCompiler(Gtk.HBox):
     def _status(self, msg):
         """Show a message in the status bar, if possible.
         """
-        # flash_message is only avaiable on gedit >= 2.17.5
-        status = self._window.get_statusbar()
-        try:
-            status.flash_message('flyscala: ' + msg)
-        except AttributeError:
-            print('flyscala: ' + msg)
+        statusbar = self._window.get_statusbar()
+        context_id = statusbar.get_context_id('FlyScala')
+        statusbar.push(context_id, 'flyscala: ' + msg)
         return
 
     def set_font(self, font_name):
