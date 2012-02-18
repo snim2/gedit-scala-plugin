@@ -179,7 +179,10 @@ class FastScalaCompiler(Gtk.HBox):
         """Is the current document a Scala program?
         """
         doc = self._window.get_active_document()
-        lang = doc.get_language().get_name()
+        try:
+            lang = doc.get_language().get_name()
+        except AttributeError:
+            return False
         return lang.lower() == 'scala'
     
     def reset(self):
@@ -215,7 +218,7 @@ class FastScalaCompiler(Gtk.HBox):
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
                                    cwd=path)
-        process.wait ()
+        process.wait()
         output = process.communicate()
         return output, process.returncode
 
@@ -225,6 +228,7 @@ class FastScalaCompiler(Gtk.HBox):
         tag = None if returncode == 0 else 'error'
         if returncode == 0:
             self._insert('%s finished successfully.\n' % tool)
+            return
         if output[0]:
             self._insert(output[0], tag)
         if output[1]:
@@ -239,6 +243,8 @@ class FastScalaCompiler(Gtk.HBox):
         Assume the object name is the same as the un-suffixed document name.
         """
         output, returncode = self._run(cmd='scala', ext=False)
+        if returncode is None: # No Scala document.
+            return
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
@@ -246,8 +252,10 @@ class FastScalaCompiler(Gtk.HBox):
         """Compile the current document.
         """
         output, returncode = self._run()
-        if returncode == 0: # No errors to process
-            return
+        if returncode is None: # No Scala document.
+            return None, None
+        if returncode == 0:    # No errors to process.
+            return None, returncode
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
         self._highlight_errors(messages)
@@ -257,6 +265,8 @@ class FastScalaCompiler(Gtk.HBox):
         """Compile the current document AND display results in bottom panel.
         """
         output, returncode = self.compile_background()
+        if returncode is None: # No Scala document.
+            return
         self._display_tool_output(returncode, output, tool='Compiler')
         return
 
