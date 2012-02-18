@@ -26,6 +26,7 @@
 from gi.repository import GObject, Gtk, Gedit, Pango
 
 import os
+import re
 import subprocess
 
 
@@ -45,7 +46,7 @@ UI_XML = """
 
         
 class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
-    __gtype_name__ = "FlyScala"
+    __gtype_name__ = 'FlyScala'
     window = GObject.property(type=Gedit.Window)
    
     def __init__(self):
@@ -57,17 +58,17 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
 
     def _add_ui(self):
         manager = self.window.get_ui_manager()
-        self._actions = Gtk.ActionGroup("ScalaActions")
+        self._actions = Gtk.ActionGroup('ScalaActions')
         self._actions.add_actions([
             ('Scala', None, "_Scala", None, None, None),
-            ('RunScalaAction', Gtk.STOCK_EXECUTE, "_Run Scala...", 
+            ('RunScalaAction', Gtk.STOCK_EXECUTE, 'Run Scala...', 
                 "F5", "Run the current Scala document", 
                 self.on_run_scala_action_activate),
-            ('CompileScalaAction', Gtk.STOCK_EXECUTE, "_Compile Scala...", 
-                "F6", "Compile the current Scala document", 
+            ('CompileScalaAction', Gtk.STOCK_EXECUTE, '_Compile Scala...', 
+                'F6', 'Compile the current Scala document', 
                 self.on_compile_scala_action_activate),
-            ('ResetFSCAction', Gtk.STOCK_REFRESH, "_Restart fsc", 
-                None, "Restart the fast Scala compiler", 
+            ('ResetFSCAction', Gtk.STOCK_REFRESH, '_Restart fsc', 
+                None, 'Restart the fast Scala compiler', 
                 self.on_reset_fsc_action_activate),
         ])
         manager.insert_action_group(self._actions)
@@ -110,7 +111,44 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         manager.ensure_update()
         self._fsc.remove_ui()
         return
-        
+
+
+class ScalaCompilerMessage(object):
+
+    ERRTYPES = dict(W='warning', E='error')
+    
+    def __init__(self, fname, lineno, errtype, msg, code, carat):
+        self.file = fname
+        self.lineno = int(lineno)
+        self.errtype = errtype
+        self.msg = msg
+        self.code = code.strip()
+        self.carat = carat
+        return
+
+    @staticmethod
+    def factory(errortext):
+        """Parse Scala compiler error text and return a list of instances
+        of ScalaCompilerMessage.
+        """
+        # pylint: disable-msg=W0141
+        # pylint: disable-msg=W0142
+        msg_re = re.compile(r'^(?P<file>[^:]+):'
+                            r'(?P<lineno>\d+): '
+                            r'(?P<type>[A-Za-z]+): '
+                            r'(?P<msg>.*)\n'
+                            r'(?P<code>.*)\n'
+                            r'(?P<carat>\s*\^\s*)\n',
+                            flags=re.MULTILINE)
+        matches = msg_re.findall(errortext)
+        return map(lambda m: ScalaCompilerMessage(*m), matches)
+
+    def __str__(self):
+        # pylint: disable-msg=W0141
+        msg = [self.file, ':', self.lineno, ': ', self.errtype,
+               self.msg, '\n', self.code, '\n', self.carat, '\n']
+        return ''.join(map(str), msg)
+
         
 class FastScalaCompiler(Gtk.HBox):
     """A widget to display the output of running Scala programs.
@@ -128,6 +166,7 @@ class FastScalaCompiler(Gtk.HBox):
         self._bottom_widget = None
         self._plugin = plugin
         self._window = window
+        self._tags = {}
         scrolled = Gtk.ScrolledWindow()
         self._view = self._create_view()
         scrolled.add(self._view)
@@ -161,7 +200,7 @@ class FastScalaCompiler(Gtk.HBox):
         doc = self._window.get_active_document()
         # Only run fsc if the current document is Scala code.
         if not self.is_scala():
-            self._status('flyscala: %s is not a Scala file.' %
+            self._status('%s is not a Scala file.' %
                          doc.get_uri_for_display())
             return None, None
         # Get the path and filename of the current document.
@@ -181,6 +220,8 @@ class FastScalaCompiler(Gtk.HBox):
         return output, process.returncode
 
     def _display_tool_output(self, returncode, output, tool='Compiler'):
+        """Display the output of a compiler or runtime to the output pane.
+        """
         tag = None if returncode == 0 else 'error'
         if returncode == 0:
             self._insert('%s finished successfully.\n' % tool)
@@ -201,28 +242,46 @@ class FastScalaCompiler(Gtk.HBox):
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
-    def compile(self):
-        """Compile the current document.
-        """
-        output, returncode = self._run()
-        self._display_tool_output(returncode, output, tool='Compiler')
-        return
-
     def compile_background(self):
         """Compile the current document.
         """
         output, returncode = self._run()
         if returncode == 0: # No errors to process
             return
-        # TODO: Process error messages.
-        return   
+        text = output[0] if output[0] else output[1]
+        messages = ScalaCompilerMessage.factory(text)
+        self._highlight_errors(messages)
+        return output, returncode
+    
+    def compile(self):
+        """Compile the current document AND display results in bottom panel.
+        """
+        output, returncode = self.compile_background()
+        self._display_tool_output(returncode, output, tool='Compiler')
+        return
+
+    def _highlight_errors(self, messages):
+        """Add tags to all lines of code with warnings or errors.
+        """
+        doc = self._window.get_active_document()
+        # Remove old tags
+        start, end = doc.get_bounds()
+        doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['E'], start, end)
+        doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['W'], start, end)
+        self._create_tags()
+        flag = Gtk.TextSearchFlags.TEXT_ONLY
+        for message in messages:
+            start = doc.get_iter_at_line(message.lineno - 1)
+            end = doc.get_iter_at_line(message.lineno)
+            match = start.forward_search(message.code, flag, end)
+            doc.apply_tag_by_name(message.errtype, match[0], match[1])
+        return
     
     def _clear(self):
         """Clear the output panel.
         """
         buff = self._view.get_buffer()
-        start = buff.get_start_iter()
-        end = buff.get_end_iter()
+        start, end = buff.get_bounds()
         buff.delete(start, end)
         return
 
@@ -244,11 +303,24 @@ class FastScalaCompiler(Gtk.HBox):
         return
 
     def _append(self, text, tag_name=None):
+        """Append text to the output pane.
+        """
         self._insert(text, tag_name, True)
         return
 
+    def _create_tags(self):
+        """Create error and warning tags that will annotate source code.
+        """
+        doc = self._window.get_active_document()
+        doc.create_tag('error',
+                       underline = Pango.Underline.ERROR)
+        doc.create_tag('warning',
+                       underline = Pango.Underline.SINGLE)
+        return
+    
     def _create_view(self):
-        """ Create the gtk.TextView used for shell output """        
+        """Create the gtk.TextView used for compiler / runtime output.
+        """
         view = Gtk.TextView()
         view.set_editable(False)
         buff = view.get_buffer()
@@ -280,28 +352,12 @@ class FastScalaCompiler(Gtk.HBox):
         # flash_message is only avaiable on gedit >= 2.17.5
         status = self._window.get_statusbar()
         try:
-            status.flash_message(msg)
+            status.flash_message('flyscala: ' + msg)
         except AttributeError:
-            print(msg)
+            print('flyscala: ' + msg)
         return
 
     def set_font(self, font_name):
         font_desc = Pango.FontDescription(font_name)
         self._view.modify_font(font_desc)
         return
-
-
-class ScalaCompilerMessage(object):
-
-    def __init__ (self):
-        # TODO
-        raise NotImplementedError
-
-    def parse(self):
-        # TODO
-        raise NotImplementedError
-
-    def __str__(self):
-        # TODO
-        raise NotImplementedError       
-
