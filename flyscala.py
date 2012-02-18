@@ -225,7 +225,6 @@ class FastScalaCompiler(Gtk.HBox):
     def _display_tool_output(self, returncode, output, tool='Compiler'):
         """Display the output of a compiler or runtime to the output pane.
         """
-        print returncode, output
         tag = None if returncode == 0 else 'error'
         if returncode == 0:
             self._insert('%s finished successfully.\n' % tool)
@@ -247,7 +246,6 @@ class FastScalaCompiler(Gtk.HBox):
         output, returncode = self._run(cmd='scala', ext=False)
         if returncode is None: # No Scala document.
             return
-        print returncode, output
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
@@ -289,12 +287,15 @@ class FastScalaCompiler(Gtk.HBox):
                                    start, end)
         for message in messages:
             # Which document is the error in?
-            doc = docs[message.file]
-            # Where is the error?
-            start = doc.get_iter_at_line(message.lineno - 1)
-            end = doc.get_iter_at_line(message.lineno)
-            match = start.forward_search(message.code, flag, end)
-            doc.apply_tag_by_name(message.errtype, match[0], match[1])
+            try:
+                doc = docs[message.file]
+                # Where is the error?
+                start = doc.get_iter_at_line(message.lineno - 1)
+                end = doc.get_iter_at_line(message.lineno)
+                match = start.forward_search(message.code, flag, end)
+                doc.apply_tag_by_name(message.errtype, match[0], match[1])
+            except KeyError: # Document is not open.
+                pass
         return
     
     def _clear(self):
