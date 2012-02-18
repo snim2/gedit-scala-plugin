@@ -225,10 +225,12 @@ class FastScalaCompiler(Gtk.HBox):
     def _display_tool_output(self, returncode, output, tool='Compiler'):
         """Display the output of a compiler or runtime to the output pane.
         """
+        print returncode, output
         tag = None if returncode == 0 else 'error'
         if returncode == 0:
             self._insert('%s finished successfully.\n' % tool)
-            return
+            if output is None:
+                return
         if output[0]:
             self._insert(output[0], tag)
         if output[1]:
@@ -245,6 +247,7 @@ class FastScalaCompiler(Gtk.HBox):
         output, returncode = self._run(cmd='scala', ext=False)
         if returncode is None: # No Scala document.
             return
+        print returncode, output
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
@@ -273,14 +276,21 @@ class FastScalaCompiler(Gtk.HBox):
     def _highlight_errors(self, messages):
         """Add tags to all lines of code with warnings or errors.
         """
-        doc = self._window.get_active_document()
         # Remove old tags
-        start, end = doc.get_bounds()
-        doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['E'], start, end)
-        doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['W'], start, end)
         self._create_tags()
         flag = Gtk.TextSearchFlags.TEXT_ONLY
+        docs = {}
+        for doc in self._window.get_documents():
+            docs[doc.get_uri_for_display()] = doc
+            start, end = doc.get_bounds()
+            doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['E'],
+                                   start, end)
+            doc.remove_tag_by_name(ScalaCompilerMessage.ERRTYPES['W'],
+                                   start, end)
         for message in messages:
+            # Which document is the error in?
+            doc = docs[message.file]
+            # Where is the error?
             start = doc.get_iter_at_line(message.lineno - 1)
             end = doc.get_iter_at_line(message.lineno)
             match = start.forward_search(message.code, flag, end)
