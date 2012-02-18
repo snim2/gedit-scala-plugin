@@ -23,7 +23,10 @@
 #  Boston, MA 02111-1307, USA.
 
 
-from gi.repository import GObject, Gtk, Gedit, Pango
+from gi.repository import GObject
+from gi.repository import Gtk
+from gi.repository import Gedit
+from gi.repository import Pango
 
 import os
 import re
@@ -35,8 +38,9 @@ UI_XML = """
   <menubar name="MenuBar">
     <placeholder name="ExtraMenu_1">
       <menu name="ScalaMenu" action="Scala">
-          <menuitem name="CompileScalaAction" action="CompileScalaAction"/>
           <menuitem name="RunScalaAction" action="RunScalaAction"/>
+          <menuitem name="CompileScalaAction" action="CompileScalaAction"/>
+          <menuitem name="CompileALlScalaAction" action="CompileAllScalaAction"/>
           <menuitem name="ResetFSCAction" action="ResetFSCAction"/>
       </menu>
     </placeholder>
@@ -61,12 +65,18 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         self._actions = Gtk.ActionGroup('ScalaActions')
         self._actions.add_actions([
             ('Scala', None, "_Scala", None, None, None),
-            ('RunScalaAction', Gtk.STOCK_EXECUTE, 'Run Scala...', 
-                "F5", "Run the current Scala document", 
+            ('RunScalaAction', Gtk.STOCK_EXECUTE,
+             'Compile and run this file...', 'F5',
+             'Run the current Scala document', 
                 self.on_run_scala_action_activate),
-            ('CompileScalaAction', Gtk.STOCK_EXECUTE, '_Compile Scala...', 
-                'F6', 'Compile the current Scala document', 
+            ('CompileScalaAction', Gtk.STOCK_EXECUTE,
+             '_Compile this file...', 'F6',
+             'Compile the current Scala document', 
                 self.on_compile_scala_action_activate),
+            ('CompileAllScalaAction', Gtk.STOCK_EXECUTE,
+             '_Compile this directory...', 'F7',
+             'Compile all Scala files in the current directory', 
+                self.on_compile_all_scala_action_activate),
             ('ResetFSCAction', Gtk.STOCK_REFRESH, '_Restart fsc', 
                 None, 'Restart the fast Scala compiler', 
                 self.on_reset_fsc_action_activate),
@@ -118,6 +128,11 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         self._fsc.compile()
         return
 
+    def on_compile_all_scala_action_activate(self, action, data=None):
+        # pylint: disable-msg=W0613
+        self._fsc.compile(folder=True)
+        return
+    
     def on_run_scala_action_activate(self, action, data=None):
         # pylint: disable-msg=W0613
         self._fsc.run()
@@ -219,11 +234,13 @@ class FastScalaCompiler(Gtk.HBox):
         process.wait ()
         return
 
-    def _run(self, cmd='fsc', ext=True):
+    def _run(self, cmd='fsc', ext=True, folder=False):
         """Run some command on the current document and return output.
         Do nothing if the current document is not a Scala program.
         If ext is False, strip the trailing .scala from the filename.
+        If folder is True, use '*.scala' rather than a filename.
         """
+        # pylint: disable-msg=W0141
         doc = self._window.get_active_document()
         # Only run fsc if the current document is Scala code.
         if not self.is_scala():
@@ -232,13 +249,21 @@ class FastScalaCompiler(Gtk.HBox):
             return None, None
         # Get the path and filename of the current document.
         location = doc.get_location()
-        basename = location.get_basename()
-        if not ext:
-            basename = basename.split('.')[0]
         path = os.sep.join(location.get_path().split(os.sep)[:-1])        
+        if folder:
+            files = os.listdir(path)
+            cmdline = filter(lambda s: s.endswith('.scala'), files)
+            cmdline.insert(0, cmd)
+        elif not ext:
+            basename = location.get_basename()
+            basename = basename.split('.')[0]
+            cmdline = [cmd, basename]
+        else:
+            basename = location.get_basename()
+            cmdline = [cmd, basename]
         # Run compiler or runtime tool and capture output.
-        self._status(cmd + ' ' + path + os.sep + basename)
-        process = subprocess.Popen([cmd, basename],
+        self._status(' '.join(cmdline))
+        process = subprocess.Popen(cmdline,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
                                    cwd=path)
@@ -267,16 +292,17 @@ class FastScalaCompiler(Gtk.HBox):
         Assume the current document has already been compiled.
         Assume the object name is the same as the un-suffixed document name.
         """
+        self.compile()
         output, returncode = self._run(cmd='scala', ext=False)
         if returncode is None: # No Scala document.
             return
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
-    def compile_background(self):
+    def compile_background(self, folder=False):
         """Compile the current document.
         """
-        output, returncode = self._run()
+        output, returncode = self._run(folder=folder)
         if returncode is None: # No Scala document.
             return None, None
         if returncode == 0:    # No errors to process.
@@ -286,10 +312,10 @@ class FastScalaCompiler(Gtk.HBox):
         self._highlight_errors(messages)
         return output, returncode
     
-    def compile(self):
+    def compile(self, folder=False):
         """Compile the current document AND display results in bottom panel.
         """
-        output, returncode = self.compile_background()
+        output, returncode = self.compile_background(folder=folder)
         if returncode is None: # No Scala document.
             return
         self._display_tool_output(returncode, output, tool='Compiler')
@@ -382,7 +408,7 @@ class FastScalaCompiler(Gtk.HBox):
         # Add to bottom panel of Gedit
         panel = self._window.get_bottom_panel()
         panel.add_item_with_stock_icon(self, "ScalaOutput",
-                                       "Scala console", Gtk.STOCK_EXECUTE)
+                                       "Scala Output", Gtk.STOCK_EXECUTE)
         return
     
     def remove_ui(self):
