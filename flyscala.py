@@ -185,8 +185,8 @@ class ScalaCompilerMessage(object):
     def __str__(self):
         # pylint: disable-msg=W0141
         msg = [self.file, ':', self.lineno, ': ', self.errtype,
-               self.msg, '\n', self.code, '\n', self.carat, '\n']
-        return ''.join(map(str), msg)
+               ': ', self.msg, '\n', self.code, '\n', self.carat, '\n']
+        return ''.join(map(str, msg))
 
         
 class FastScalaCompiler(Gtk.HBox):
@@ -270,22 +270,6 @@ class FastScalaCompiler(Gtk.HBox):
         process.wait()
         output = process.communicate()
         return output, process.returncode
-
-    def _display_tool_output(self, returncode, output, tool='Compiler'):
-        """Display the output of a compiler or runtime to the output pane.
-        """
-        tag = None if returncode == 0 else 'error'
-        if returncode == 0:
-            self._insert('%s finished successfully.\n' % tool)
-            if output is None:
-                return
-        if output[0]:
-            self._insert(output[0], tag)
-        if output[1]:
-            self._insert(output[1], tag)
-        self._append("Exit: ", 'info') 
-        self._append("%s\n\n" % returncode, 'bold')
-        return
     
     def run(self):
         """Run Scala code.
@@ -347,30 +331,86 @@ class FastScalaCompiler(Gtk.HBox):
             except KeyError: # Document is not open.
                 pass
         return
+
+    def on_error_clicked(self, selection):
+        doc = self._window.get_active_document()
+        model, treeiter = selection.get_selected()
+        if treeiter is not None:
+            errors = ScalaCompilerMessage.factory(model[treeiter][0])
+            if errors == []: return
+            if doc.get_uri_for_display() == errors[0].file:
+                doc.goto_line(errors[0].lineno - 1)
+        return
+    
+    def _create_view(self):
+        """Create the gtk.TextView used for compiler / runtime output.
+        """
+        doc = self._window.get_active_document()
+        model = Gtk.ListStore(str)
+        view = Gtk.TreeView(model=model)
+        err_col = Gtk.TreeViewColumn('fsc and scala output',
+                                     Gtk.CellRendererText(),
+                                     text=0)
+        view.append_column(err_col)
+        select = view.get_selection()
+        select.connect('changed', self.on_error_clicked)
+        # buff = view.get_buffer()
+        # buff.create_tag('bold', foreground='#7F7F7F',
+        #                 weight=Pango.Weight.BOLD)
+        # buff.create_tag('info', foreground='#7F7F7F',
+        #                 style=Pango.Style.OBLIQUE)
+        # buff.create_tag('warning', foreground='orange',
+        #                 style=Pango.Style.OBLIQUE)
+        # buff.create_tag('error', foreground='red')
+        return view
+
+    
+    def _display_tool_output(self, returncode, output, tool='Compiler'):
+        """Display the output of a compiler or runtime to the output pane.
+        """
+#        tag = None if returncode == 0 else 'error'
+        if returncode == 0:
+            self._insert(['%s finished successfully.\n' % tool])
+            if output is None:
+                return
+        text = output[0] if output[0] else output[1]
+        messages = ScalaCompilerMessage.factory(text)
+        if messages == []:
+            self._insert([text, 'Exit: %s\n\n' % returncode])
+        else:
+            self._insert(messages)
+#        self._append("Exit: ", 'info') 
+#        self._append("%s\n\n" % returncode, 'bold')
+        return
     
     def _clear(self):
         """Clear the output panel.
         """
-        buff = self._view.get_buffer()
-        start, end = buff.get_bounds()
-        buff.delete(start, end)
+        self._view.set_model(Gtk.ListStore(str))        
+#        buff = self._view.get_buffer()
+#        start, end = buff.get_bounds()
+#        buff.delete(start, end)
         return
 
-    def _insert(self, text, tag_name=None, append=False):
+    def _insert(self, messages, tag_name=None, append=False):
         """ Insert text, apply tag, and scroll to end iter """
+        # pylint: disable-msg=W0141
         if not append:
             self._clear()
-        buff = self._view.get_buffer()
-        end_iter = buff.get_end_iter()
-        buff.insert(end_iter, "%s" % text)
-        if tag_name:
-            offset = buff.get_char_count() - len(text)
-            start_iter = buff.get_iter_at_offset(offset)
-            end_iter = buff.get_end_iter()
-            buff.apply_tag_by_name(tag_name, start_iter, end_iter)
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-        self._view.scroll_to_iter(buff.get_end_iter(), 0.0, True, 0.0, 0.0)
+        model = self._view.get_model()
+        for msg in messages:
+            model.append([str(msg)])
+        # buff = self._view.get_buffer()
+        # end_iter = buff.get_end_iter()
+        # buff.insert(end_iter, "%s" % text)
+        # if tag_name:
+        #     offset = buff.get_char_count() - len(text)
+        #     start_iter = buff.get_iter_at_offset(offset)
+        #     end_iter = buff.get_end_iter()
+        #     buff.apply_tag_by_name(tag_name, start_iter, end_iter)
+        # while Gtk.events_pending():
+        #     Gtk.main_iteration()
+        # self._view.scroll_to_iter(buff.get_end_iter(), 0.0, True, 0.0, 0.0)
         return
 
     def _append(self, text, tag_name=None):
@@ -389,21 +429,6 @@ class FastScalaCompiler(Gtk.HBox):
                        underline = Pango.Underline.SINGLE)
         return
     
-    def _create_view(self):
-        """Create the gtk.TextView used for compiler / runtime output.
-        """
-        view = Gtk.TextView()
-        view.set_editable(False)
-        buff = view.get_buffer()
-        buff.create_tag('bold', foreground='#7F7F7F',
-                        weight=Pango.Weight.BOLD)
-        buff.create_tag('info', foreground='#7F7F7F',
-                        style=Pango.Style.OBLIQUE)
-        buff.create_tag('warning', foreground='orange',
-                        style=Pango.Style.OBLIQUE)
-        buff.create_tag('error', foreground='red')
-        return view
-
     def add_ui(self):
         # Add to bottom panel of Gedit
         panel = self._window.get_bottom_panel()
