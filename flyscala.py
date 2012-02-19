@@ -400,14 +400,11 @@ class FastScalaCompiler(Gtk.HBox):
         for msg in messages:
             model.append([str(msg)])
         cells = self._view.get_column(0).get_cells()
-        if style is not None:
-            for cell in cells:
-                cell.set_property('foreground', style)
-                cell.set_property('weight', 750)
-        else:
-            for cell in cells:
-                cell.set_property('foreground', 'black')
-                cell.set_property('weight', 400)            
+        if style is None:
+            style = 'black'
+        for cell in cells:
+            cell.set_property('foreground', style)
+            cell.set_property('weight', 750)
         return
 
     def _append(self, text):
