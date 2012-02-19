@@ -64,7 +64,7 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         manager = self.window.get_ui_manager()
         self._actions = Gtk.ActionGroup('ScalaActions')
         self._actions.add_actions([
-            ('Scala', None, "_Scala", None, None, None),
+            ('Scala', None, "S_cala", None, None, None),
             ('RunScalaAction', Gtk.STOCK_EXECUTE,
              'Compile and run this file...', 'F5',
              'Run the current Scala document', 
