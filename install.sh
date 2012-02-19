@@ -42,7 +42,8 @@ echo "Installing a gedit3 plugin for Scala."
 
 # Create gedit directory structure, if it does not exist.
 cd ~/.local/share
-mkdir -p {gedit, gedit/plugins}
+mkdir -p gedit
+mkdir -p gedit/plugins
 cd gedit/plugins
 
 wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.plugin
