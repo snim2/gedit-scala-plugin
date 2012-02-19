@@ -39,7 +39,6 @@ UI_XML = """
     <placeholder name="ExtraMenu_1">
       <menu name="ScalaMenu" action="Scala">
           <menuitem name="RunScalaAction" action="RunScalaAction"/>
-          <menuitem name="CompileScalaAction" action="CompileScalaAction"/>
           <menuitem name="CompileALlScalaAction" action="CompileAllScalaAction"/>
           <menuitem name="ResetFSCAction" action="ResetFSCAction"/>
       </menu>
@@ -69,12 +68,8 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
              'Compile and run this file...', 'F5',
              'Run the current Scala document', 
                 self.on_run_scala_action_activate),
-            ('CompileScalaAction', Gtk.STOCK_EXECUTE,
-             '_Compile this file...', 'F6',
-             'Compile the current Scala document', 
-                self.on_compile_scala_action_activate),
             ('CompileAllScalaAction', Gtk.STOCK_EXECUTE,
-             '_Compile this directory...', 'F7',
+             '_Compile this directory...', 'F6',
              'Compile all Scala files in the current directory', 
                 self.on_compile_all_scala_action_activate),
             ('ResetFSCAction', Gtk.STOCK_REFRESH, '_Restart fsc', 
@@ -106,12 +101,12 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
 
     def on_document_loaded(self, document, data=None):
         # pylint: disable-msg=W0613
-        self._fsc.compile_background()
+        self._fsc.compile()
         return
     
     def on_document_saved(self, document, data=None):
         # pylint: disable-msg=W0613
-        self._fsc.compile_background()
+        self._fsc.compile()
         return
                             
     def do_activate(self):
@@ -129,11 +124,6 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
 
     def do_update_state(self):
         pass
-
-    def on_compile_scala_action_activate(self, action, data=None):
-        # pylint: disable-msg=W0613
-        self._fsc.compile()
-        return
 
     def on_compile_all_scala_action_activate(self, action, data=None):
         # pylint: disable-msg=W0613
@@ -213,7 +203,7 @@ class FastScalaCompiler(Gtk.HBox):
         self._plugin = plugin
         self._window = window
         scrolled = Gtk.ScrolledWindow()
-        self._view = self._create_view()
+        self._view, self._liststore = self._create_view()
         scrolled.add(self._view)
         self.pack_start(scrolled, True, True, 0)
         self.set_font("monospace 10")
@@ -289,7 +279,7 @@ class FastScalaCompiler(Gtk.HBox):
         self._display_tool_output(returncode, output, tool='Scala')
         return
     
-    def compile_background(self, folder=False):
+    def compile(self, folder=False):
         """Compile the current document.
         """
         output, returncode = self._run(folder=folder)
@@ -297,16 +287,11 @@ class FastScalaCompiler(Gtk.HBox):
             return None, None
         if returncode == 0:            # No errors to process.
             self._remove_tags()        # Remove old tags.
+            self._clear()              # Clear output pane.
             return None, returncode
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
         self._highlight_errors(messages)
-        return output, returncode
-    
-    def compile(self, folder=False):
-        """Compile the current document AND display results in bottom panel.
-        """
-        output, returncode = self.compile_background(folder=folder)
         if returncode is None: # No Scala document.
             return
         self._display_tool_output(returncode, output, tool='Compiler')
@@ -347,14 +332,12 @@ class FastScalaCompiler(Gtk.HBox):
         return
 
     def on_error_clicked(self, selection):
-        print 'error_clicked'
         doc = self._window.get_active_document()
         model, treeiter = selection.get_selected()
         if treeiter is not None:
             errors = ScalaCompilerMessage.factory(model[treeiter][0])
             if errors == []: return
             location = doc.get_uri_for_display()
-            print location, os.path.basename(location), errors[0].file
             if (location == errors[0].file or
                 os.path.basename(location) == errors[0].file):
                 doc.goto_line(errors[0].lineno - 1)
@@ -374,7 +357,7 @@ class FastScalaCompiler(Gtk.HBox):
         view.append_column(err_col)
         select = view.get_selection()
         select.connect('changed', self.on_error_clicked)
-        return view
+        return view, model
     
     def _display_tool_output(self, returncode, output, tool='Compiler'):
         """Display the output of a compiler or runtime to the output pane.
@@ -386,7 +369,7 @@ class FastScalaCompiler(Gtk.HBox):
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
         if messages == []:
-            self._insert([text, 'Exit: %s\n\n' % returncode], style='grey')
+            self._insert([text, 'Exit: %s\n\n' % returncode], style='dark grey')
         else:
             self._insert(messages, style='red')
         return
@@ -394,29 +377,29 @@ class FastScalaCompiler(Gtk.HBox):
     def _clear(self):
         """Clear the output panel.
         """
-        self._view.set_model(Gtk.ListStore(str))        
+        self._liststore.clear()
         return
 
     def _insert(self, messages, style=None, append=False):
-        """ Insert text, apply tag, and scroll to end iter """
+        """Insert text, apply styling.
+        """
         # pylint: disable-msg=W0141
         if not append:
             self._clear()
-        model = self._view.get_model()
         for msg in messages:
-            model.append([str(msg)])
+            self._liststore.append([str(msg)])
         cells = self._view.get_column(0).get_cells()
         if style is None:
             style = 'black'
         for cell in cells:
             cell.set_property('foreground', style)
-            cell.set_property('weight', 750)
+            cell.set_property('weight', 500)
         return
 
-    def _append(self, text):
+    def _append(self, messages, style=None):
         """Append text to the output pane.
         """
-        self._insert(text, True)
+        self._insert(messages, style, True)
         return
 
     def _create_tags(self, doc=None):
