@@ -327,20 +327,23 @@ class FastScalaCompiler(Gtk.HBox):
         flag = Gtk.TextSearchFlags.TEXT_ONLY
         docs = {}
         for doc in self._window.get_documents():
+            # fsc may give errors with full paths or just basenames.
+            # So this dict should have both.
             docs[doc.get_uri_for_display()] = doc
+            docs[os.path.basename(doc.get_uri_for_display())] = doc
             self._remove_tags(doc)
         for message in messages:
             # Which document is the error in?
-            try:
+            if message.file in docs:
                 doc = docs[message.file]
-                # Where is the error?
-                start = doc.get_iter_at_line(message.lineno - 1)
-                end = doc.get_iter_at_line(message.lineno)
-                match = start.forward_search(message.code, flag, end)
-                doc.apply_tag_by_name('flyscala-' + message.errtype,
-                                      match[0], match[1])
-            except KeyError: # Document is not open.
-                pass
+            else: # Document is not open.
+                return 
+            # Where is the error?
+            start = doc.get_iter_at_line(message.lineno - 1)
+            end = doc.get_iter_at_line(message.lineno)
+            match = start.forward_search(message.code, flag, end)
+            doc.apply_tag_by_name('flyscala-' + message.errtype,
+                                  match[0], match[1])
         return
 
     def on_error_clicked(self, selection):
