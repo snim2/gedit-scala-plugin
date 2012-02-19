@@ -347,13 +347,19 @@ class FastScalaCompiler(Gtk.HBox):
         return
 
     def on_error_clicked(self, selection):
+        print 'error_clicked'
         doc = self._window.get_active_document()
         model, treeiter = selection.get_selected()
         if treeiter is not None:
             errors = ScalaCompilerMessage.factory(model[treeiter][0])
             if errors == []: return
-            if doc.get_uri_for_display() == errors[0].file:
+            location = doc.get_uri_for_display()
+            print location, os.path.basename(location), errors[0].file
+            if (location == errors[0].file or
+                os.path.basename(location) == errors[0].file):
                 doc.goto_line(errors[0].lineno - 1)
+                docview = self._window.get_active_view()
+                docview.scroll_to_cursor()
         return
     
     def _create_view(self):
