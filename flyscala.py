@@ -223,7 +223,7 @@ class FastScalaCompiler(Gtk.HBox):
     def reset(self):
         """Reset fsc when something has gone wrong.
         """
-        process = subprocess.Popen(['fsc', '-reset'],
+        process = subprocess.Popen(['fsc', '-shutdown'],
                                    stdout=open('/dev/null', 'w'),
                                    stderr=open('/dev/null', 'w'),
                                    cwd='/tmp/')
