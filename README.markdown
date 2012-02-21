@@ -6,6 +6,7 @@ This plugin adds the following features to gedit:
   * Automatically compiles files in the background every time you save.
   * Highlights compiler errors and warnings in the source.
   * Captures compiler / scala output in the "bottom panel" of Gedit (you have to turn that on in the View menu). Clicking on an error or warning scrolls you up to the line number the problem occurred on.
+  * SCALA_HOME can be configured from Edit->Preferences->Plugins->flyscala->Preferences on the top-level Gedit menu.
 
 ## Installing the plugin
 
