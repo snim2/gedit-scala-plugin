@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema path="/org/gnome/gedit/plugins/flyscala/" id="org.gnome.gedit.plugins.flyscala" gettext-domain="gedit">
+    <key type="s" name="scala-home">
+      <default>'/opt/scala-2.9.1-final/'</default>
+      <summary>SCALA_HOME environment variable</summary>
+      <description>SCALA_HOME environment variable.</description>
+    </key>
+  </schema>
+</schemalist>

@@ -24,13 +24,23 @@
 
 
 from gi.repository import GObject
-from gi.repository import Gtk
 from gi.repository import Gedit
+from gi.repository import Gio
+from gi.repository import Gtk
 from gi.repository import Pango
+from gi.repository import PeasGtk
 
+import logging
 import os
 import re
 import subprocess
+
+LOG_FILE = '/tmp/flyscala.txt'
+
+logging.basicConfig(filename=LOG_FILE,                    
+#                    level=logging.CRITICAL,
+                    level=logging.DEBUG,
+                    filemode='w',)
 
 
 UI_XML = """
@@ -47,8 +57,50 @@ UI_XML = """
 </ui>
 """
 
+
+class FlyScalaConfigure(object):
+    """Preferences dialog for the flyscala plugin.
+    Sets the locatio of the SCALA_HOME environment variable.
+    """
+    
+    BASE_KEY = 'org.gnome.gedit.plugins.flyscala'
+    SCALA_HOME = 'scala-home'
+    
+    def __init__(self):
+        self._settings = Gio.Settings.new(self.BASE_KEY)
+        return
+
+    def configure_widget(self):
+        label = Gtk.Label('SCALA_HOME')
+        entry = Gtk.Entry()
+        scala_home = self._settings.get_string(self.SCALA_HOME)
+        entry.set_text(scala_home)
+        self._settings.connect('changed::scala-home',
+                               self.on_scala_home_changed,
+                               entry)
+        entry.connect('changed', self.on_scala_home_entry_changed, entry)
+        hbox = Gtk.HBox(False, 4)
+        hbox.add(label)
+        hbox.add(entry)
+        return hbox
+
+    def on_scala_home_changed(self, settings, key, entry, data=None):
+        # pylint: disable-msg=W0613
+        logging.debug('Setting text entry box to: ' + entry.get_text())
+        entry.set_text(settings.get_string(key))
+        return
+    
+    def on_scala_home_entry_changed(self, entry, data=None):
+        # pylint: disable-msg=W0613
+        logging.debug('Setting SCALA_HOME to: ' + entry.get_text())
+        self._settings.set_string(self.SCALA_HOME, entry.get_text())
+        return
         
-class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
+
+class FlyScalaPlugin(GObject.Object,
+                     Gedit.WindowActivatable,
+                     PeasGtk.Configurable):
+    
     __gtype_name__ = 'FlyScala'
     window = GObject.property(type=Gedit.Window)
    
@@ -84,11 +136,8 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
         self._fsc.add_ui()
         return
 
-    def _add_handler(self, handler_id):
-        handlers = self.window.get_data('FlyScalaHandlers')
-        handlers.append(handler_id)
-        self.window.set_data('FlyScalaHandlers', handlers)
-        return
+    def do_create_configure_widget(self):
+        return FlyScalaConfigure().configure_widget()
     
     def on_tab_added(self, window, tab, data=None):
         # pylint: disable-msg=W0613
@@ -138,6 +187,12 @@ class FlyScalaPlugin(GObject.Object, Gedit.WindowActivatable):
     def on_reset_fsc_action_activate(self, action, data=None):
         # pylint: disable-msg=W0613
         self._fsc.reset()
+        return
+
+    def _add_handler(self, handler_id):
+        handlers = self.window.get_data('FlyScalaHandlers')
+        handlers.append(handler_id)
+        self.window.set_data('FlyScalaHandlers', handlers)
         return
     
     def _remove_ui(self):
@@ -208,6 +263,9 @@ class FastScalaCompiler(Gtk.HBox):
         self.pack_start(scrolled, True, True, 0)
         self.set_font("monospace 10")
         self.show_all()
+        settings = Gio.Settings.new(FlyScalaConfigure.BASE_KEY)
+        self._scala_home = settings.get_string(FlyScalaConfigure.SCALA_HOME)
+        logging.debug('SCALA_HOME: ' + self._scala_home)
         return
     
     def is_scala(self):
@@ -223,13 +281,17 @@ class FastScalaCompiler(Gtk.HBox):
     def reset(self):
         """Reset fsc when something has gone wrong.
         """
-        process = subprocess.Popen(['fsc', '-shutdown'],
+        cmd = 'fsc -shutdown'
+        cmd += ' -J-Djline.terminal=jline.UnsupportedTerminal'
+        cmd += ' -J-Dscala.home=%s ' % self._scala_home
+        process = subprocess.Popen([cmd],
                                    stdout=open('/dev/null', 'w'),
                                    stderr=open('/dev/null', 'w'),
+                                   shell=True,
                                    cwd='/tmp/')
         process.wait ()
         return
-
+    
     def _run(self, cmd='fsc', ext=True, folder=False):
         """Run some command on the current document and return output.
         Do nothing if the current document is not a Scala program.
@@ -245,26 +307,39 @@ class FastScalaCompiler(Gtk.HBox):
             return None, None
         # Get the path and filename of the current document.
         location = doc.get_location()
-        path = os.sep.join(location.get_path().split(os.sep)[:-1])        
+        fullpath = location.get_path()
+        dirname = os.path.dirname(fullpath)
+        fname = os.path.basename(fullpath)
         if folder:
-            files = os.listdir(path)
+            files = os.listdir(dirname)
             cmdline = filter(lambda s: s.endswith('.scala'), files)
             cmdline.insert(0, cmd)
         elif not ext:
-            basename = location.get_basename()
-            basename = basename.split('.')[0]
-            cmdline = [cmd, basename]
+            fname = fname.split('.')[:-1]
+            cmdline = [cmd, ''.join(fname)]
         else:
-            basename = location.get_basename()
-            cmdline = [cmd, basename]
+            cmdline = [cmd, fullpath]
         # Run compiler or runtime tool and capture output.
-        self._status(' '.join(cmdline))
-        process = subprocess.Popen(cmdline,
+        cmd += ' -J-Djline.terminal=jline.UnsupportedTerminal'
+        cmd += ' -J-Dscala.home=%s ' % self._scala_home
+        cmd = ' '.join(cmdline)
+        self._status(cmd)
+        logging.debug('cwd: ' + dirname)
+        logging.debug(cmd)
+        process = subprocess.Popen(cmd,
+                                   stdin=None,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
-                                   cwd=path)
+                                   env={'SCALA_HOME':self._scala_home},
+                                   cwd=dirname,
+                                   shell=True)
         process.wait()
         output = process.communicate()
+        logging.debug(cmd + ': retcode: ' + str(process.returncode))
+        if output[0] is not None:
+            logging.debug(cmd + ': output[0]:\n' + output[0])
+        if output[1] is not None:
+            logging.debug(cmd + ': output[1]:\n' + output[1])
         return output, process.returncode
     
     def run(self):
@@ -274,7 +349,8 @@ class FastScalaCompiler(Gtk.HBox):
         """
         self.compile()
         output, returncode = self._run(cmd='scala', ext=False)
-        if returncode is None: # No Scala document.
+        if (returncode is None or # No Scala document.
+            returncode != 0):     # Unsucessful compile.
             return
         self._display_tool_output(returncode, output, tool='Scala')
         return
@@ -282,15 +358,22 @@ class FastScalaCompiler(Gtk.HBox):
     def compile(self, folder=False):
         """Compile the current document.
         """
+        # pylint: disable-msg=W6501
+        logging.debug('COMPILE METHOD...')
         output, returncode = self._run(folder=folder)
+        logging.debug('Return code of subprocess is: %s' % str(returncode))
+        text = output[0] if output[0] else output[1]
         if returncode is None:         # No Scala document.
             return None, None
-        if returncode == 0:            # No errors to process.
-            self._remove_tags()        # Remove old tags.
-            self._clear()              # Clear output pane.
+        if returncode == 0 and not text: # No errors to process.
+            self._remove_tags()          # Remove old tags.
+            self._clear()                # Clear output pane.
             return None, returncode
-        text = output[0] if output[0] else output[1]
+        logging.debug('Got text: ' + text)
         messages = ScalaCompilerMessage.factory(text)
+        logging.debug('text made %d messages' % len(messages))
+        for message in messages:
+            logging.debug(str(message))
         self._highlight_errors(messages)
         if returncode is None: # No Scala document.
             return
@@ -369,7 +452,8 @@ class FastScalaCompiler(Gtk.HBox):
         text = output[0] if output[0] else output[1]
         messages = ScalaCompilerMessage.factory(text)
         if messages == []:
-            self._insert([text, 'Exit: %s\n\n' % returncode], style='dark grey')
+            self._insert([text, 'Exit: %s\n\n' % returncode],
+                         style='dark grey')
         else:
             self._insert(messages, style='red')
         return
@@ -407,7 +491,6 @@ class FastScalaCompiler(Gtk.HBox):
         """
         if doc is None:
             doc = self._window.get_active_document()
-
         err = doc.get_tag_table().lookup('flyscala-error')
         if err is None:
             doc.create_tag(tag_name = 'flyscala-error',

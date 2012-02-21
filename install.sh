@@ -50,6 +50,13 @@ wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.plugin
 wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.gedit-plugin
 wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.py
 
+# Installing gsettings scheme for the flyscala plugin
+wget https://raw.github.com/snim2/gedit-scala-plugin/master/org.gnome.gedit.plugins.flyscala.gschema.xml
+
+gksudo cp org.gnome.gedit.plugins.flyscala.gschema.xml /usr/share/glib-2.0/schemas/
+
+gksudo glib-compile-schemas /usr/share/glib-2.0/schemas/
+
 echo "Plugin installed."
 echo "*** IMPORTANT ***"
 echo "Please start gedit and activate the Scala On The Fly plugin from the Edit->Preferences dialog"
