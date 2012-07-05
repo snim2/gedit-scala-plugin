@@ -14,7 +14,7 @@ mkdir -p ~/.gnome2/gtksourceview-1.0/language-specs/
 cd ~/.gnome2/gtksourceview-1.0/language-specs/
 
 # Download the spec.
-wget http://lampsvn.epfl.ch/trac/scala/export/26099/scala-tool-support/trunk/src/gedit/scala.lang
+https://raw.github.com/scala/scala-dist/master/tool-support/src/gedit/scala.lang
 
 # Add a MIME type for Scala files.
 mkdir -p ~/.local/share/mime/
