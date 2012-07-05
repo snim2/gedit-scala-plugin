@@ -5,22 +5,17 @@
 # for the Gedit text editor.
 #
 # (c) Sarah Mount 26 Jan 2012.
+# updated by Felix Dietze 05 Jul 2012
 #
+echo "Installing Scala language spec and mime type..."
 
-# Create a directory for the language spec.
-mkdir -p ~/.gnome2/gtksourceview-1.0/
+# Install the language spec
 mkdir -p ~/.gnome2/gtksourceview-1.0/language-specs/
-
-cd ~/.gnome2/gtksourceview-1.0/language-specs/
-
-# Download the spec.
-wget http://lampsvn.epfl.ch/trac/scala/export/26099/scala-tool-support/trunk/src/gedit/scala.lang
+wget -q https://raw.github.com/scala/scala-dist/master/tool-support/src/gedit/scala.lang -O ~/.gnome2/gtksourceview-1.0/language-specs/scala.lang
 
 # Add a MIME type for Scala files.
-mkdir -p ~/.local/share/mime/
 mkdir -p ~/.local/share/mime/packages
-
-cat > Scala.xml << EOF 
+cat > ~/.local/share/mime/packages/Scala.xml << EOF 
 <mime-info xmlns='http://www.freedesktop.org/standards/shared-mime-info'>
   <mime-type type="text/x-scala">
     <comment>Scala Source</comment>
@@ -30,33 +25,22 @@ cat > Scala.xml << EOF
 </mime-info>
 EOF
 
-# Update MIME database.
-cd ~/.local/share/
-update-mime-database mime
+update-mime-database ~/.local/share/mime
 
-# Done.
-echo "Scala language specification for GEdit has been installed."
 
-# Install the Scala plugin for on-the-fly compilation.
-echo "Installing a gedit3 plugin for Scala."
 
-# Create gedit directory structure, if it does not exist.
-cd ~/.local/share
-mkdir -p gedit
-mkdir -p gedit/plugins
-cd gedit/plugins
 
-wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.plugin
-wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.gedit-plugin
-wget https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.py
+echo "Installing Scala gedit plugin..."
+
+mkdir -p ~/.local/share/gedit/plugins
+wget -q https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.plugin -O ~/.local/share/gedit/plugins/flyscala.plugin
+wget -q https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.gedit-plugin -O ~/.local/share/gedit/plugins/flyscala.gedit-plugin
+wget -q https://raw.github.com/snim2/gedit-scala-plugin/master/flyscala.py -O ~/.local/share/gedit/plugins/flyscala.py
 
 # Installing gsettings scheme for the flyscala plugin
-wget https://raw.github.com/snim2/gedit-scala-plugin/master/org.gnome.gedit.plugins.flyscala.gschema.xml
-
-gksudo cp org.gnome.gedit.plugins.flyscala.gschema.xml /usr/share/glib-2.0/schemas/
-
+wget -q https://raw.github.com/snim2/gedit-scala-plugin/master/org.gnome.gedit.plugins.flyscala.gschema.xml -O org.gnome.gedit.plugins.flyscala.gschema.xml
+gksudo mv org.gnome.gedit.plugins.flyscala.gschema.xml /usr/share/glib-2.0/schemas/
 gksudo glib-compile-schemas /usr/share/glib-2.0/schemas/
 
-echo "Plugin installed."
-echo "*** IMPORTANT ***"
+echo "done."
 echo "Please start gedit and activate the Scala On The Fly plugin from the Edit->Preferences dialog"
